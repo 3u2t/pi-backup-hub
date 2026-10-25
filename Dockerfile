@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
 COPY --from=rclone /usr/local/bin/rclone /usr/local/bin/rclone
 COPY --from=restic /usr/bin/restic /usr/local/bin/restic
 WORKDIR /app
+COPY LICENSE ./LICENSE
 COPY requirements.txt .
 RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 COPY hub ./hub
