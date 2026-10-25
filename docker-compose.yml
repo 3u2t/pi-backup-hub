@@ -1,0 +1,74 @@
+name: pi-backup-hub
+services:
+  pi-backup-hub:
+    container_name: pi-backup-hub
+    image: pi-backup-hub:local
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${HUB_BIND_ADDRESS:-127.0.0.1}:${HUB_PORT:-8094}:8080"
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-http://localhost:8094}
+      HUB_ALLOWED_HOSTS: ${HUB_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      PGHOST: ${PGHOST:-immich_postgres}
+      PGPORT: ${PGPORT:-5432}
+      PGDATABASE: ${PGDATABASE:-immich}
+      PGUSER: ${PGUSER:-immich_backup_hub}
+      PGPASSFILE: /data/postgres.pgpass
+      GOMAXPROCS: "2"
+      GOMEMLIMIT: 384MiB
+    volumes:
+      - type: bind
+        source: ${HUB_DATA_DIRECTORY:?Set HUB_DATA_DIRECTORY in .env}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HUB_SOURCE_DIRECTORY:?Set HUB_SOURCE_DIRECTORY in .env}
+        target: /source
+        read_only: true
+        bind:
+          create_host_path: false
+          propagation: rslave
+      - type: bind
+        source: ${IMMICH_CONFIG_DIRECTORY:?Set IMMICH_CONFIG_DIRECTORY in .env}
+        target: /immich-config
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${IMMICH_MEDIA_DIRECTORY:?Set IMMICH_MEDIA_DIRECTORY in .env}
+        target: /immich-extra
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${IMMICH_EXTERNAL_DIRECTORY:?Set IMMICH_EXTERNAL_DIRECTORY in .env}
+        target: /immich-external
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - immich
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpus: 1.5
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"
+networks:
+  immich:
+    external: true
+    name: ${IMMICH_NETWORK:?Set IMMICH_NETWORK in .env}

@@ -1,0 +1,16 @@
+{
+  "source_uuid": "REPLACE_WITH_SOURCE_FILESYSTEM_UUID",
+  "source_label": "Backup source",
+  "host_source": "/mnt/backup-source",
+  "immich_version": "REPLACE_WITH_INSTALLED_IMMICH_VERSION",
+  "path_mappings": [
+    {
+      "container": "/usr/src/app/upload",
+      "local": "/immich-extra"
+    },
+    {
+      "container": "/external-library",
+      "local": "/immich-external"
+    }
+  ]
+}
