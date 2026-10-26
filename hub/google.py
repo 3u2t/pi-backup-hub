@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import requests
 
 from .core import now
+from .api_usage import ApiUsage, counts_as_api
 
 SCOPES = {
     'drive': ['openid', 'email', 'https://www.googleapis.com/auth/drive.file'],
@@ -20,15 +21,17 @@ SCOPES = {
 
 
 class GoogleError(RuntimeError):
-    def __init__(self, message, status=0):
+    def __init__(self, message, status=0, reason=''):
         super().__init__(message)
         self.status = status
+        self.reason = reason
 
 
 class Google:
     def __init__(self, store):
         self.store = store
         self.locks = {purpose:threading.RLock() for purpose in SCOPES}
+        self.api_usage=ApiUsage(store)
 
     def configure_client(self, document):
         if not isinstance(document,dict) or 'installed' not in document:
@@ -137,6 +140,8 @@ class Google:
         timeout=kwargs.pop('timeout',(20,180))
         for attempt in range(4 if retry else 1):
             headers['Authorization']='Bearer '+self.token(purpose,force=attempt>0 and previous_status==401)
+            if counts_as_api(purpose,url):
+                self.api_usage.record(purpose)
             try:
                 response=requests.request(method,url,headers=headers,timeout=timeout,
                                           allow_redirects=False,**kwargs)
@@ -152,14 +157,16 @@ class Google:
             if retry and attempt<3 and response.status_code in [401,429,500,502,503,504]:
                 time.sleep(2**attempt)
                 continue
-            code=''
+            code='';reason=''
             try:
                 error=response.json().get('error',{})
                 if isinstance(error,dict):
                     code=error.get('status','')
+                    if response.status_code==403 and 'requires billing' in error.get('message','').lower():
+                        reason='billing_required'
             except ValueError:
                 pass
-            raise GoogleError(f'Google-Anfrage fehlgeschlagen: HTTP {response.status_code} {code}'.strip(),response.status_code)
+            raise GoogleError(f'Google-Anfrage fehlgeschlagen: HTTP {response.status_code} {code}'.strip(),response.status_code,reason)
         raise GoogleError('Google-Anfrage momentan nicht möglich.')
 
     def rclone_config(self):

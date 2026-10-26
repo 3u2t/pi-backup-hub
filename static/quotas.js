@@ -7,8 +7,8 @@ const ApiQuotas = (() => {
   const age=Number.isFinite(measured)?Math.max(0,(now-measured)/1000):null;
   return {used,limit,percent:used===null||limit<=0?null:used/limit*100,
    stale:age!==null&&(row.period==='minute'?age>600:age>900),
-   label:row.title+(row.period==='day'?' pro Tag':' pro Minute')+(row.per_user?' und Nutzer':' und Projekt'),
-   unavailable:row.per_user?'Google liefert keinen einzelnen Nutzerwert.':dailyExpired?'Neuer Google-Kontingenttag. Messwerte werden geladen.':'Google liefert noch keine Messwerte.'};
+   label:(row.scope==='app'?'App: ':'')+row.title+(row.period==='day'?' pro Tag':' pro Minute')+(row.per_user?' und Nutzer':' und Projekt'),
+   unavailable:row.usage_status==='units_unavailable'?'Google-Einheiten ohne Abrechnung nicht auslesbar.':row.usage_status==='not_used'?'Diese App verwendet keine Medien-Downloads.':row.per_user?'Google liefert keinen einzelnen Nutzerwert.':dailyExpired?'Neuer Google-Kontingenttag. Messwerte werden geladen.':'Google liefert noch keine Messwerte.'};
  }
  return {view};
 })();

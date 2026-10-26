@@ -58,16 +58,18 @@ function renderApiLimitLinks(s) {
  $('quota-connect-notice').hidden=Boolean(monitoring.connected);
  $('monitoring-account').textContent=monitoring.email?'Lesefreigabe: '+monitoring.email:'';
  $('refresh-quotas').disabled=!monitoring.connected;
- const stale=q.fetched_at&&current-Date.parse(q.fetched_at)>180000;
- badge('quota-status',!monitoring.connected?'Lesefreigabe fehlt':q.status==='error'?'Abruffehler':stale?'Daten veraltet':q.status==='loading'?'Wird geladen':'Google-Messwerte',q.status==='ok'&&!stale,q.status==='error'||stale);
+ const local=q.mode==='local',stale=!local&&q.fetched_at&&current-Date.parse(q.fetched_at)>180000;
+ badge('quota-status',!monitoring.connected?'Lesefreigabe fehlt':q.status==='error'?'Abruffehler':local?'App-Zähler live':stale?'Daten veraltet':q.status==='loading'?'Wird geladen':'Google-Messwerte',(q.status==='ok'||local)&&!stale,q.status==='error'||stale);
  $('quota-error').hidden=!q.error;
  $('quota-error').textContent=q.error||'';
- $('quota-updated').textContent=q.fetched_at?'Zuletzt bei Google abgefragt: '+date(q.fetched_at,true)+(stale?' · Daten veraltet':''):'Noch keine Verbrauchsdaten abgerufen.';
+ $('quota-updated').textContent=local?'App-Anfragen erfasst seit '+date(q.local?.started_at)+'. Anzeige aktualisiert: '+date(q.local?.measured_at,true):q.fetched_at?'Zuletzt bei Google abgefragt: '+date(q.fetched_at,true)+(stale?' · Daten veraltet':''):'Noch keine Verbrauchsdaten abgerufen.';
+ $('quota-description').textContent=local?'Kostenlose Live-Zählung der Anfragen dieser App. Die zugehörigen Projektlimits werden bei Google gelesen.':'Echte Verbrauchsdaten deines Google-Projekts. Automatische Aktualisierung jede Minute, solange das Dashboard geöffnet ist.';
+ $('quota-freshness').textContent=local?'Google verlangt für seinen gesamten Verbrauchszähler eine aktivierte Abrechnung. Hier wird deshalb nur der eigene App-Verbrauch ab Beginn der Erfassung gezählt, nicht der gesamte Google-Projektverbrauch. Frühere Anfragen und andere Apps fehlen. Drive wird alle zwei Sekunden abgelesen; kurze Hilfsaufrufe können fehlen. Googles gewichtete Einheiten sind damit nicht messbar.':'Google meldet Messwerte mit einigen Minuten Verzögerung. Drive zeigt den zuletzt gemeldeten Minutenwert; Google Fotos die Summe des aktuellen Google-Kontingenttags. Tageslimits werden um Mitternacht US-Pazifikzeit zurückgesetzt. Fehlende Messwerte werden als „—“ angezeigt.';
  for(const purpose of ['photos','drive']) {
   const rows=q.services?.[purpose]?.limits||[];
   $(purpose+'-quota-rows').innerHTML=rows.length?rows.map(row=>{
    const model=ApiQuotas.view(row,current),percent=model.percent===null?'—':new Intl.NumberFormat('de-DE',{maximumFractionDigits:2}).format(model.percent)+' %';
-   return '<div class="quota-row"><div class="quota-row-heading"><span>'+escapeHtml(model.label)+'</span><b class="'+(model.percent>=90?'quota-high':'')+'">'+escapeHtml(percent)+'</b></div><strong class="quota-amount">'+(model.used===null?'—':number(model.used))+' <small>/ '+(model.limit<0?'Unbegrenzt':number(model.limit))+'</small></strong>'+(model.percent===null?'':'<progress max="100" value="'+Math.min(100,model.percent)+'" aria-label="'+escapeHtml(model.label)+'"></progress>')+'<small class="quota-row-note">'+escapeHtml(model.used===null?model.unavailable:(model.stale?'Letzter gemeldeter Wert: ':'Google-Messwert: ')+date(row.measured_at,true))+'</small></div>';
+   return '<div class="quota-row"><div class="quota-row-heading"><span>'+escapeHtml(model.label)+'</span><b class="'+(model.percent>=90?'quota-high':'')+'">'+escapeHtml(percent)+'</b></div><strong class="quota-amount">'+(model.used===null?'—':number(model.used))+' <small>/ '+(model.limit<0?'Unbegrenzt':number(model.limit))+'</small></strong>'+(model.percent===null?'':'<progress max="100" value="'+Math.min(100,model.percent)+'" aria-label="'+escapeHtml(model.label)+'"></progress>')+'<small class="quota-row-note">'+escapeHtml(model.used===null?model.unavailable:(local?'App-Zähler: ':model.stale?'Letzter gemeldeter Wert: ':'Google-Messwert: ')+date(row.measured_at,true))+'</small></div>';
   }).join(''):'<p>'+escapeHtml(!monitoring.connected?'Wartet auf die Google-Lesefreigabe.':q.status==='error'?'Verbrauch momentan nicht verfügbar.':'Google liefert noch keine Messwerte.')+'</p>';
  }
  for(const [id,service] of [['monitoring-api-link','monitoring.googleapis.com'],['serviceusage-api-link','serviceusage.googleapis.com']]) {

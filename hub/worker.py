@@ -15,12 +15,14 @@ import time
 from urllib.parse import urlparse
 
 import psycopg
+import requests
 from psycopg.rows import dict_row
 
 from .core import UTC, atomic, now, schedule_due
 from .google import GoogleError
 from .telemetry import UploadMeter
 from .quotas import QuotaMonitor
+from .api_usage import ApiUsage
 
 
 class Cancelled(RuntimeError):
@@ -45,6 +47,7 @@ class Engine:
         self.upload_meter=UploadMeter()
         self.quota_monitor=QuotaMonitor(store,google)
         self.quota_event=threading.Event()
+        self.api_usage=ApiUsage(store)
 
     def start(self):
         self.store.set('reconcile_running',False)
@@ -55,6 +58,12 @@ class Engine:
     def _network_loop(self):
         while not self.stop.is_set():
             self.upload_meter.sample()
+            try:
+                response=requests.get('http://127.0.0.1:5573/metrics',timeout=(.3,.5),allow_redirects=False)
+                if response.status_code==200 and len(response.content)<1024*1024:
+                    self.api_usage.observe_rclone(response.text)
+            except (requests.RequestException,ValueError):
+                pass
             self.stop.wait(2)
 
     def _quota_loop(self):
@@ -189,6 +198,9 @@ class Engine:
 
     def _run(self, args, job, env=None, collect=False):
         result=[]
+        if Path(args[0]).name=='rclone' or env and 'RESTIC_REPOSITORY' in env:
+            env=dict(env or os.environ)
+            env['RCLONE_METRICS_ADDR']='127.0.0.1:5573'
         process=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,
                                  env=env,start_new_session=True,bufsize=1)
         lines=queue.Queue()

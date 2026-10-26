@@ -92,6 +92,8 @@ This is a separate connection. It asks for `monitoring.read` and `cloud-platform
 
 The dashboard refreshes at most once per minute while it is open. Google can report metrics several minutes late. An empty metric is shown as unknown rather than zero, and user-specific quotas do not use the project total as a substitute for individual usage.
 
+If Google says usage queries require billing, leave billing disabled. The app switches to **App-Zähler live**, which counts this installation's requests from that point onward. The limits still come from Google. This count does not include earlier requests or other apps, and it cannot report Google's weighted Drive units. Drive counters are sampled from the upload process, so short helper calls can be missed.
+
 ## Before relying on automatic backups
 
 In Google's external **Testing** mode, refresh tokens for these permissions expire after seven days. A successful sign-in today does not remove that limit. See [Google's token-expiration rules](https://developers.google.com/identity/protocols/oauth2#expiration).

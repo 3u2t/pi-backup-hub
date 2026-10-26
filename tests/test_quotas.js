@@ -9,4 +9,6 @@ assert.equal(view({...row,measured_at:'2026-10-26T18:40:00Z'},now).stale,true);
 assert.equal(view({...row,limit:-1},now).percent,null);
 assert.equal(view({...row,period:'day',reset_at:'2026-10-26T07:00:00Z'},now).used,null);
 assert.match(view({...row,per_user:true,used:null},now).unavailable,/Nutzerwert/);
+assert.match(view({...row,scope:'app'},now).label,/^App: /);
+assert.match(view({...row,usage_status:'units_unavailable',used:null},now).unavailable,/ohne Abrechnung/);
 console.log('Quota usage, missing data, freshness and day reset checks passed');

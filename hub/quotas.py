@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from .core import UTC, now
 from .google import GoogleError
+from .api_usage import ApiUsage
 
 
 SERVICES = {'photos':'photoslibrary.googleapis.com','drive':'drive.googleapis.com'}
@@ -34,7 +35,7 @@ def definitions(metrics, purpose):
                 if bucket.get('dimensions'):
                     continue
                 value=int(bucket['effectiveLimit'])
-                title='Medienabrufe' if 'base' in (display+' '+metric_id).lower() else 'Einheiten' if 'unit' in (display+' '+metric_id).lower() else 'Anfragen'
+                title='Medienabrufe' if 'base' in (display+' '+metric_id).lower() else 'Einheiten' if any(word in (display+' '+metric_id).lower() for word in ['unit','query_cost']) else 'Anfragen'
                 period='day' if '/d/' in unit else 'minute'
                 per_user='{user}' in unit
                 rows.append({'id':limit['name'],'metric':metric_id,'title':title,'google_name':display,
@@ -83,12 +84,30 @@ class QuotaMonitor:
         self.lock=threading.Lock()
         self.last_attempt=None
         self.active_until=0
+        self.api_usage=ApiUsage(store)
 
     def snapshot(self):
         self.active_until=time.monotonic()+90
         if not self.google.connected('monitoring'):
             return {'status':'not_connected','services':{},'poll_seconds':60}
-        return self.store.get('api_quota_usage') or {'status':'loading','services':{},'poll_seconds':60}
+        result=self.store.get('api_quota_usage') or {'status':'loading','services':{},'poll_seconds':60}
+        if result.get('mode')=='local':
+            local=self.api_usage.snapshot()
+            result.update(local=local,status='local')
+            result.pop('error',None)
+            for purpose,service in result.get('services',{}).items():
+                for row in service.get('limits',[]):
+                    row.update(used=None,measured_at=None,scope='app',usage_status='no_data')
+                    if row['title']=='Einheiten':
+                        row['usage_status']='units_unavailable'
+                    elif row['per_user']:
+                        row['usage_status']='per_user_unavailable'
+                    elif row['title']=='Medienabrufe':
+                        row['usage_status']='not_used'
+                    elif purpose=='photos' or local.get('drive_observation'):
+                        row.update(used=local['services'][purpose][row['period']],measured_at=local['measured_at'],usage_status='local',
+                                   reset_at=quota_day(dt.datetime.now(UTC))[1].isoformat() if row['period']=='day' else None)
+        return result
 
     def active(self):
         return time.monotonic()<self.active_until
@@ -127,6 +146,10 @@ class QuotaMonitor:
             if not re.fullmatch(r'[a-z][a-z0-9-]{4,62}',project):
                 self.store.set('api_quota_usage',{'status':'error','error':'Die Google-Client-Datei enthält keine gültige Projekt-ID.','services':{}})
                 return
+            blocked=self.store.get('quota_monitor_billing_required')==project
+            previous=self.store.get('api_quota_usage') or {}
+            if blocked and previous.get('mode')=='local' and previous.get('fetched_at') and (current-timestamp(previous['fetched_at'])).total_seconds()<3600:
+                return
             result={'status':'ok','fetched_at':now(),'services':{},'poll_seconds':60,'project_id':project}
             errors=[]
             for purpose,service in SERVICES.items():
@@ -137,7 +160,9 @@ class QuotaMonitor:
                 except (GoogleError,ValueError,KeyError) as error:
                     errors.append(self._error(error))
                     result['services'][purpose]={'limits':[],'error':self._error(error)}
-            if any(service['limits'] for service in result['services'].values()):
+            if blocked:
+                result.update(status='local',mode='local')
+            elif any(service['limits'] for service in result['services'].values()):
                 day_start,_=quota_day(current)
                 start=min(day_start,current-dt.timedelta(minutes=15))
                 params={'filter':'metric.type="serviceruntime.googleapis.com/quota/rate/net_usage" AND resource.type="consumer_quota" AND (resource.labels.service="drive.googleapis.com" OR resource.labels.service="photoslibrary.googleapis.com")',
@@ -150,7 +175,11 @@ class QuotaMonitor:
                     for purpose,value in result['services'].items():
                         apply_usage(value['limits'],series,SERVICES[purpose],current)
                 except (GoogleError,ValueError,KeyError) as error:
-                    errors.append(self._error(error))
+                    if isinstance(error,GoogleError) and error.reason=='billing_required':
+                        self.store.set('quota_monitor_billing_required',project)
+                        result.update(status='local',mode='local')
+                    else:
+                        errors.append(self._error(error))
             if errors:
                 result.update(status='error',error=' '.join(dict.fromkeys(errors)))
             result['fetched_at']=now()

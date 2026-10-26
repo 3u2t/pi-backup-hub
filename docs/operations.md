@@ -44,6 +44,10 @@ Enable the Cloud Monitoring API and Service Usage API in the same project, then 
 
 Usage is fetched at most once per minute while the dashboard is in use. Google's own metrics can lag several minutes. Minute quotas show the latest reported minute; daily quotas sum the current Pacific Time quota day. Per-user usage is left unknown when Google only supplies a project total. Missing samples are not treated as zero. The app stops quota queries after 750,000 returned monitoring series in a UTC calendar month. Google's monitoring free allowance is shared with other queries; see [Monitoring pricing](https://cloud.google.com/products/observability/pricing).
 
+Cloud Monitoring can reject usage queries on projects without billing. The app detects this response and uses a local counter instead. It keeps reading the project's actual limits through Service Usage, at most once per hour. It does not enable billing or retry the blocked monitoring query automatically.
+
+The local counter starts when installed; it cannot reconstruct earlier usage or count other apps. Photo request attempts are counted at dispatch, including retries. Drive uses rclone's HTTP counters from a metrics-only endpoint bound to the container's loopback interface. No rclone control server, HTTP header dump or request-body logging is enabled. Counters are sampled every two seconds, so short helper processes and activity just before a process exits can be missed. The counter persists across app restarts. It reports requests, not Google's weighted Drive quota units, and labels those units as unavailable.
+
 API requests, upload bytes and account storage are separate limits; one uploaded photo can require several requests. Google's documented 750 GB daily Drive upload/copy restriction specifically names Workspace users.
 
 Docker resource limits depend on the host kernel. `GOMEMLIMIT=384MiB` is a soft per-process Go runtime limit, not a hard container memory cap.
