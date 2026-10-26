@@ -43,6 +43,15 @@ function render(s){state=s;if(!populated)populate(s);$('live-status').textConten
  $('jobs-table').innerHTML=s.jobs.length?s.jobs.map(j=>'<tr><td>'+escapeHtml(jobNames[j.kind]||j.kind)+'</td><td><span class="status-text '+escapeHtml(j.status)+'">'+escapeHtml(statusNames[j.status]||j.status)+'</span></td><td>'+escapeHtml(date(j.started||j.created))+'</td><td>'+escapeHtml(readableUnits(j.summary))+'</td></tr>').join(''):'<tr><td colspan="4" class="empty">Noch keine Aufgaben gestartet.</td></tr>';
  $('snapshots-table').innerHTML=s.snapshots.length?[...s.snapshots].reverse().map(x=>'<tr><td>'+escapeHtml(date(x.time))+'</td><td><code>'+escapeHtml(x.short_id||x.id?.slice(0,8))+'</code></td><td>'+escapeHtml(x.hostname)+'</td></tr>').join(''):'<tr><td colspan="3" class="empty">Noch keine Sicherungsstände geladen.</td></tr>';
  $('last-check').textContent=(s.last_repository_check?'Letzte Strukturprüfung: '+date(s.last_repository_check)+'. ':'')+(s.last_restore_test?'Letzter Rückholtest: '+date(s.last_restore_test.at)+'.':'');const progress=s.photos_progress;$('photos-progress-wrap').hidden=!progress||!counts.uploading;if(progress){$('photos-progress-label').textContent=progress.name+' · '+bytes(progress.bytes)+' / '+bytes(progress.total);$('photos-progress').value=progress.total?progress.bytes/progress.total*100:0;}}
+function renderApiLimitLinks(s) {
+ for(const [purpose,service] of [['photos','photoslibrary.googleapis.com'],['drive','drive.googleapis.com']]) {
+  const link=$(purpose+'-quota-link');
+  if(!link)continue;
+  const url=new URL('https://console.cloud.google.com/apis/api/'+service+'/quotas');
+  if(s.project_id)url.searchParams.set('project',s.project_id);
+  link.href=url.href;
+ }
+}
 function renderBackupProgress(job,s) {
  const model=BackupProgress.view(job,s.network_upload,s.server_time),backup=job.kind==='backup';
  $('running-label').textContent=jobNames[job.kind]||job.kind;
@@ -64,7 +73,7 @@ function renderBackupProgress(job,s) {
  $('backup-processed').textContent=model.done===null?'—':bytes(model.done);
  $('backup-note').textContent=!backup?'':model.paused?'Die HDD-Sicherung ist pausiert. Fortsetzen prüft die Dateien erneut und verwendet gespeicherte Daten wieder. Die Foto-Automatik läuft separat weiter.':model.pausing?'Die HDD-Sicherung wird sicher angehalten. Das kann kurz dauern, während bereits übertragene Daten gespeichert werden.':!model.scanComplete?'Die Dateiliste wird noch ermittelt. Der Prozentwert ist vorläufig; eine Restzeit erscheint nach dem Scan.':'Die Restzeit ist eine Schätzung und kann sich ändern. Der Uploadwert misst den Netzwerkverkehr dieser App; die Quelldatenmenge berücksichtigt auch wiederverwendete Daten.';
 }
-async function refresh(){try{render(await api('/api/state'));}catch(error){$('live-status').textContent='Verbindung unterbrochen';if(!state)toast(error.message,true);}}
+async function refresh(){try{const s=await api('/api/state');render(s);renderApiLimitLinks(s);}catch(error){$('live-status').textContent='Verbindung unterbrochen';if(!state)toast(error.message,true);}}
 async function action(path,body={},message='Gespeichert.'){try{await api(path,body);toast(message);await refresh();}catch(error){toast(error.message,true);}}
 document.querySelectorAll('[data-job]').forEach(button=>button.addEventListener('click',()=>action('/api/jobs/'+button.dataset.job,{},'Aufgabe gestartet.')));
 $('drive-form').addEventListener('submit',async event=>{event.preventDefault();if($('retention-enabled').checked&&!state.settings.drive.retention_enabled&&!confirm('Die aktivierten Aufbewahrungsregeln dürfen ältere Sicherungsstände nach einem erfolgreichen Backup endgültig entfernen. Aktivieren?'))return;const drive={enabled:$('drive-enabled').checked,folder:$('drive-folder').value,schedule:$('drive-schedule').value,time:$('drive-time').value,weekdays:[...document.querySelectorAll('#weekdays-field input:checked')].map(x=>Number(x.value)),interval_hours:Number($('drive-interval').value),upload_mib:storedUploadLimit($('drive-limit').value,state.settings.drive.upload_mib),exclude:$('drive-exclude').value.split('\n').map(x=>x.trim()).filter(Boolean),retention_enabled:$('retention-enabled').checked,keep_daily:Number($('keep-daily').value),keep_weekly:Number($('keep-weekly').value),keep_monthly:Number($('keep-monthly').value)};await action('/api/settings',{timezone:$('timezone').value,drive},'HDD-Einstellungen gespeichert.');});

@@ -36,6 +36,10 @@ Interrupted transfers can resume. An unclear import response puts the item on ho
 
 Storage values use decimal units and upload fields use megabytes per second. The existing internal upload setting is converted for display without changing an unchanged saved limit.
 
+The overview lists Google's published API limits, checked on October 26, 2026. Photos Library API allows 10,000 requests per project per day. Drive's current defaults are 1,000,000 quota units per minute per project and 325,000 per minute per user. Older projects may still use request-based quotas. See [Photos limits](https://developers.google.com/photos/overview/api-limits-quotas) and [Drive limits](https://developers.google.com/workspace/drive/api/guides/limits).
+
+These are reference values, not a live quota meter. The dashboard links to the connected project's quota pages for actual usage and any custom limits. It does not request additional Google Cloud permissions. API requests, upload bytes and account storage are separate limits; one uploaded photo can require several requests. Google's documented 750 GB daily Drive upload/copy restriction specifically names Workspace users.
+
 Docker resource limits depend on the host kernel. `GOMEMLIMIT=384MiB` is a soft per-process Go runtime limit, not a hard container memory cap.
 
 The dashboard's repository check checks structure and references, not every stored block. The restore test retrieves only the database dump and checks its archive listing. See [the restore guide](restore.md) for a separate real-file restore.
