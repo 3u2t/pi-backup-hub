@@ -82,6 +82,16 @@ Use `python3` instead of `py` on Linux or macOS. Choose the account with the sto
 
 After both connections succeed, delete the downloaded helpers. They contain a temporary pairing configuration and client credentials. The reusable `google_anmelden.py` in this repository is a template, not a configured sign-in helper.
 
+## Optional: show API usage in the dashboard
+
+1. In the same Google project, check that **Cloud Monitoring API** and **Service Usage API** are enabled. The dashboard links to both pages under **Einrichtung der Verbrauchsanzeige**.
+2. Choose **Live-Anzeige verbinden** in the overview and run its downloaded helper on your computer, just like the earlier sign-in helpers.
+3. Use an account that can read the project's monitoring data and quotas. Review the two additional read permissions before accepting them.
+
+This is a separate connection. It asks for `monitoring.read` and `cloud-platform.read-only`; the latter can read other Cloud project data too. The app uses it to fetch quota configuration, and uses Monitoring to fetch quota usage. No billing account or paid resource is created. You can disconnect the read grant without disconnecting Drive or Photos.
+
+The dashboard refreshes at most once per minute while it is open. Google can report metrics several minutes late. An empty metric is shown as unknown rather than zero, and user-specific quotas do not use the project total as a substitute for individual usage.
+
 ## Before relying on automatic backups
 
 In Google's external **Testing** mode, refresh tokens for these permissions expire after seven days. A successful sign-in today does not remove that limit. See [Google's token-expiration rules](https://developers.google.com/identity/protocols/oauth2#expiration).

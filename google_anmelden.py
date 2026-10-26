@@ -42,7 +42,7 @@ def main():
             'scope':' '.join(config['scopes']),'state':state,'code_challenge':challenge,
             'code_challenge_method':'S256','access_type':'offline','prompt':'consent select_account'}
     link='https://accounts.google.com/o/oauth2/v2/auth?'+urllib.parse.urlencode(params)
-    print('Google-Anmeldung für '+('Drive' if config['purpose']=='drive' else 'Fotos'))
+    print('Google-Anmeldung für '+{'drive':'Drive','photos':'Fotos','monitoring':'die Verbrauchsanzeige'}[config['purpose']])
     print('Im Browser das Konto mit dem gewünschten Speicher auswählen. Dein Passwort wird nur bei Google eingegeben.')
     webbrowser.open(link)
     deadline=time.time()+1200

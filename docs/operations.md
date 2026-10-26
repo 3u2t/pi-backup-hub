@@ -38,7 +38,13 @@ Storage values use decimal units and upload fields use megabytes per second. The
 
 The overview lists Google's published API limits, checked on October 26, 2026. Photos Library API allows 10,000 requests per project per day. Drive's current defaults are 1,000,000 quota units per minute per project and 325,000 per minute per user. Older projects may still use request-based quotas. See [Photos limits](https://developers.google.com/photos/overview/api-limits-quotas) and [Drive limits](https://developers.google.com/workspace/drive/api/guides/limits).
 
-These are reference values, not a live quota meter. The dashboard links to the connected project's quota pages for actual usage and any custom limits. It does not request additional Google Cloud permissions. API requests, upload bytes and account storage are separate limits; one uploaded photo can require several requests. Google's documented 750 GB daily Drive upload/copy restriction specifically names Workspace users.
+Connect the optional live quota display to fetch actual limits from Service Usage and usage from Cloud Monitoring. It uses a separate OAuth grant with `monitoring.read` and `cloud-platform.read-only`. The second scope can read other Cloud project data as well; Google does not offer a quota-only OAuth scope for this endpoint. The app only reads Drive and Photos quota configuration and metrics. Disconnecting this grant leaves both upload connections and backup settings intact.
+
+Enable the Cloud Monitoring API and Service Usage API in the same project, then use **Live-Anzeige verbinden** in the dashboard. The account needs `monitoring.timeSeries.list` and `serviceusage.quotas.get` on the project. No billing account is enabled or linked by the app.
+
+Usage is fetched at most once per minute while the dashboard is in use. Google's own metrics can lag several minutes. Minute quotas show the latest reported minute; daily quotas sum the current Pacific Time quota day. Per-user usage is left unknown when Google only supplies a project total. Missing samples are not treated as zero. The app stops quota queries after 750,000 returned monitoring series in a UTC calendar month. Google's monitoring free allowance is shared with other queries; see [Monitoring pricing](https://cloud.google.com/products/observability/pricing).
+
+API requests, upload bytes and account storage are separate limits; one uploaded photo can require several requests. Google's documented 750 GB daily Drive upload/copy restriction specifically names Workspace users.
 
 Docker resource limits depend on the host kernel. `GOMEMLIMIT=384MiB` is a soft per-process Go runtime limit, not a hard container memory cap.
 

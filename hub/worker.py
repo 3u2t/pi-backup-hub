@@ -20,6 +20,7 @@ from psycopg.rows import dict_row
 from .core import UTC, atomic, now, schedule_due
 from .google import GoogleError
 from .telemetry import UploadMeter
+from .quotas import QuotaMonitor
 
 
 class Cancelled(RuntimeError):
@@ -42,10 +43,12 @@ class Engine:
         self.submit_lock=threading.Lock()
         self.threads=[]
         self.upload_meter=UploadMeter()
+        self.quota_monitor=QuotaMonitor(store,google)
+        self.quota_event=threading.Event()
 
     def start(self):
         self.store.set('reconcile_running',False)
-        for function in [self._job_loop,self._photos_loop,self._schedule_loop,self._network_loop]:
+        for function in [self._job_loop,self._photos_loop,self._schedule_loop,self._network_loop,self._quota_loop]:
             thread=threading.Thread(target=function,daemon=True,name=function.__name__)
             thread.start(); self.threads.append(thread)
 
@@ -53,6 +56,16 @@ class Engine:
         while not self.stop.is_set():
             self.upload_meter.sample()
             self.stop.wait(2)
+
+    def _quota_loop(self):
+        while not self.stop.is_set():
+            self.quota_event.clear()
+            try:
+                if self.quota_monitor.active():
+                    self.quota_monitor.refresh()
+            except Exception:
+                self.store.set('api_quota_usage',{'status':'error','error':'Verbrauchsdaten momentan nicht erreichbar. Der nächste Versuch erfolgt automatisch.','services':{}})
+            self.quota_event.wait(60)
 
     def source_info(self):
         bootstrap=self.store.bootstrap()
@@ -126,7 +139,7 @@ class Engine:
         message=str(message)
         secure=self.store.secrets()
         hidden=[secure.get('restic_password','')]
-        for field in ['google_client','drive_oauth','photos_oauth']:
+        for field in ['google_client','drive_oauth','photos_oauth','monitoring_oauth']:
             value=secure.get(field,{}) or {}
             hidden.extend(value.get(k,'') for k in ['client_secret','access_token','refresh_token'])
         for secret in hidden:

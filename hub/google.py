@@ -14,6 +14,8 @@ SCOPES = {
     'drive': ['openid', 'email', 'https://www.googleapis.com/auth/drive.file'],
     'photos': ['openid', 'email', 'https://www.googleapis.com/auth/photoslibrary.appendonly',
                'https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata'],
+    'monitoring': ['openid','email','https://www.googleapis.com/auth/monitoring.read',
+                   'https://www.googleapis.com/auth/cloud-platform.read-only'],
 }
 
 
@@ -26,7 +28,7 @@ class GoogleError(RuntimeError):
 class Google:
     def __init__(self, store):
         self.store = store
-        self.locks = {'drive': threading.RLock(), 'photos': threading.RLock()}
+        self.locks = {purpose:threading.RLock() for purpose in SCOPES}
 
     def configure_client(self, document):
         if not isinstance(document,dict) or 'installed' not in document:
@@ -109,7 +111,7 @@ class Google:
             value = secure.get(purpose+'_oauth')
             client = secure.get('google_client')
             if not value or not client:
-                raise GoogleError('Google '+('Drive' if purpose=='drive' else 'Fotos')+' ist noch nicht verbunden.')
+                raise GoogleError('Google '+{'drive':'Drive','photos':'Fotos','monitoring':'Verbrauchsanzeige'}[purpose]+' ist noch nicht verbunden.')
             if not force and value.get('expires_at',0)>time.time()+90:
                 return value['access_token']
             try:

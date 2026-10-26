@@ -51,6 +51,30 @@ function renderApiLimitLinks(s) {
   if(s.project_id)url.searchParams.set('project',s.project_id);
   link.href=url.href;
  }
+ const monitoring=s.connections.monitoring||{},q=s.api_quotas||{status:'not_connected'},current=Date.parse(s.server_time);
+ $('connect-monitoring').hidden=Boolean(monitoring.connected);
+ $('connect-monitoring').disabled=!s.client_configured;
+ $('disconnect-monitoring').hidden=!monitoring.connected;
+ $('quota-connect-notice').hidden=Boolean(monitoring.connected);
+ $('monitoring-account').textContent=monitoring.email?'Lesefreigabe: '+monitoring.email:'';
+ $('refresh-quotas').disabled=!monitoring.connected;
+ const stale=q.fetched_at&&current-Date.parse(q.fetched_at)>180000;
+ badge('quota-status',!monitoring.connected?'Lesefreigabe fehlt':q.status==='error'?'Abruffehler':stale?'Daten veraltet':q.status==='loading'?'Wird geladen':'Google-Messwerte',q.status==='ok'&&!stale,q.status==='error'||stale);
+ $('quota-error').hidden=!q.error;
+ $('quota-error').textContent=q.error||'';
+ $('quota-updated').textContent=q.fetched_at?'Zuletzt bei Google abgefragt: '+date(q.fetched_at,true)+(stale?' · Daten veraltet':''):'Noch keine Verbrauchsdaten abgerufen.';
+ for(const purpose of ['photos','drive']) {
+  const rows=q.services?.[purpose]?.limits||[];
+  $(purpose+'-quota-rows').innerHTML=rows.length?rows.map(row=>{
+   const model=ApiQuotas.view(row,current),percent=model.percent===null?'—':new Intl.NumberFormat('de-DE',{maximumFractionDigits:2}).format(model.percent)+' %';
+   return '<div class="quota-row"><div class="quota-row-heading"><span>'+escapeHtml(model.label)+'</span><b class="'+(model.percent>=90?'quota-high':'')+'">'+escapeHtml(percent)+'</b></div><strong class="quota-amount">'+(model.used===null?'—':number(model.used))+' <small>/ '+(model.limit<0?'Unbegrenzt':number(model.limit))+'</small></strong>'+(model.percent===null?'':'<progress max="100" value="'+Math.min(100,model.percent)+'" aria-label="'+escapeHtml(model.label)+'"></progress>')+'<small class="quota-row-note">'+escapeHtml(model.used===null?model.unavailable:(model.stale?'Letzter gemeldeter Wert: ':'Google-Messwert: ')+date(row.measured_at,true))+'</small></div>';
+  }).join(''):'<p>'+escapeHtml(!monitoring.connected?'Wartet auf die Google-Lesefreigabe.':q.status==='error'?'Verbrauch momentan nicht verfügbar.':'Google liefert noch keine Messwerte.')+'</p>';
+ }
+ for(const [id,service] of [['monitoring-api-link','monitoring.googleapis.com'],['serviceusage-api-link','serviceusage.googleapis.com']]) {
+  const url=new URL('https://console.cloud.google.com/apis/library/'+service);
+  if(s.project_id)url.searchParams.set('project',s.project_id);
+  $(id).href=url.href;
+ }
 }
 function renderBackupProgress(job,s) {
  const model=BackupProgress.view(job,s.network_upload,s.server_time),backup=job.kind==='backup';
@@ -72,6 +96,7 @@ function renderBackupProgress(job,s) {
  $('backup-finish').textContent=model.finish?date(model.finish,true):model.paused?'Nach dem Fortsetzen':'Wird berechnet';
  $('backup-processed').textContent=model.done===null?'—':bytes(model.done);
  $('backup-note').textContent=!backup?'':model.paused?'Die HDD-Sicherung ist pausiert. Fortsetzen prüft die Dateien erneut und verwendet gespeicherte Daten wieder. Die Foto-Automatik läuft separat weiter.':model.pausing?'Die HDD-Sicherung wird sicher angehalten. Das kann kurz dauern, während bereits übertragene Daten gespeichert werden.':!model.scanComplete?'Die Dateiliste wird noch ermittelt. Der Prozentwert ist vorläufig; eine Restzeit erscheint nach dem Scan.':'Die Restzeit ist eine Schätzung und kann sich ändern. Der Uploadwert misst den Netzwerkverkehr dieser App; die Quelldatenmenge berücksichtigt auch wiederverwendete Daten.';
+ if(backup&&!model.paused&&!model.pausing)$('backup-note').textContent+=' Nach dem Fortsetzen zählt dieser Prüflauf neu. Bereits gespeicherte Backupdaten bleiben erhalten.';
 }
 async function refresh(){try{const s=await api('/api/state');render(s);renderApiLimitLinks(s);}catch(error){$('live-status').textContent='Verbindung unterbrochen';if(!state)toast(error.message,true);}}
 async function action(path,body={},message='Gespeichert.'){try{await api(path,body);toast(message);await refresh();}catch(error){toast(error.message,true);}}
@@ -91,4 +116,5 @@ $('retry-photos').addEventListener('click',()=>action('/api/photos/retry',{},'Fe
 $('reconcile-photos').addEventListener('click',()=>action('/api/photos/reconcile',{},'Google-Status wird im Hintergrund abgeglichen.'));
 async function loadLogs(){try{const result=await api('/api/logs');$('log-output').textContent=result.logs.length?result.logs.map(x=>date(x.created)+'  ['+x.level+']  '+readableUnits(x.message)).join('\n'):'Noch keine Einträge.';}catch(error){toast(error.message,true);}}
 $('refresh-logs').addEventListener('click',loadLogs);$('refresh-state').addEventListener('click',refresh);$('logout').addEventListener('click',async()=>{await api('/api/logout',{});location.href='/login';});
+$('refresh-quotas').addEventListener('click',()=>action('/api/quotas/refresh',{},'Aktualisierung vorgemerkt. Google-Abfragen erfolgen höchstens einmal pro Minute.'));
 refresh();setInterval(refresh,5000);

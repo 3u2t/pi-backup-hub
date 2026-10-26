@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {view}=require('../static/quotas.js');
+const now=Date.parse('2026-10-26T19:00:00Z');
+const row={title:'Einheiten',period:'minute',limit:1000000,used:3200,measured_at:'2026-10-26T18:57:00Z'};
+assert.equal(view(row,now).percent,.32);
+assert.equal(view({...row,used:null},now).percent,null);
+assert.equal(view({...row,measured_at:'2026-10-26T18:40:00Z'},now).stale,true);
+assert.equal(view({...row,limit:-1},now).percent,null);
+assert.equal(view({...row,period:'day',reset_at:'2026-10-26T07:00:00Z'},now).used,null);
+assert.match(view({...row,per_user:true,used:null},now).unavailable,/Nutzerwert/);
+console.log('Quota usage, missing data, freshness and day reset checks passed');

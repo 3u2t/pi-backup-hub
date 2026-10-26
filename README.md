@@ -6,6 +6,8 @@ Disk backups are encrypted and incremental. Photo uploads keep a queue and resum
 
 During a disk backup, the dashboard shows its percentage, the app's current upload rate and an estimated finish time. You can pause the disk backup and continue later.
 
+An optional Google read connection adds current API usage and project limits to the dashboard. Google's metrics arrive with a delay of a few minutes.
+
 ## Start here
 
 Setup has three parts. Do them in order:

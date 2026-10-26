@@ -77,7 +77,7 @@ def create_app(start_workers=True, directory=None):
 
     @app.get('/health')
     def health():
-        return jsonify(status='ok',version='1.1.0')
+        return jsonify(status='ok',version='1.2.0')
 
     @app.route('/login',methods=['GET','POST'])
     def login():
@@ -107,6 +107,7 @@ def create_app(start_workers=True, directory=None):
 
     @app.get('/api/state')
     def state():
+        engine.quota_event.set()
         config=store.settings()
         secure=store.secrets()
         with store.db() as db:
@@ -120,7 +121,7 @@ def create_app(start_workers=True, directory=None):
                 try: job['progress']=json.loads(job['progress'])
                 except ValueError: job['progress']=None
         connections={name:{'connected':google.connected(name),'email':(secure.get(name+'_oauth') or {}).get('email'),
-                           'connected_at':(secure.get(name+'_oauth') or {}).get('connected_at')} for name in ['drive','photos']}
+                           'connected_at':(secure.get(name+'_oauth') or {}).get('connected_at')} for name in ['drive','photos','monitoring']}
         return jsonify(settings=config,source=engine.source_info(),connections=connections,
             client_configured=bool(secure.get('google_client')),project_id=(secure.get('google_client') or {}).get('project_id'),
             photos_counts=counts,media=recent,jobs=jobs,needs_review=review,
@@ -130,7 +131,8 @@ def create_app(start_workers=True, directory=None):
             last_photos_upload=store.get('last_photos_upload'),snapshots=store.get('snapshots',[]),
             last_repository_check=store.get('last_repository_check'),last_restore_test=store.get('last_restore_test'),
             drive_quota=store.get('drive_quota'),timezone=config['timezone'],server_time=now(),
-            source_path=store.bootstrap().get('host_source'),network_upload=engine.upload_meter.snapshot(),version='1.1.0')
+            source_path=store.bootstrap().get('host_source'),network_upload=engine.upload_meter.snapshot(),
+            api_quotas=engine.quota_monitor.snapshot(),version='1.2.0')
 
     @app.post('/api/settings')
     def settings():
@@ -184,16 +186,29 @@ def create_app(start_workers=True, directory=None):
         value=google.finish_flow(request.get_json() or {})
         if value['purpose']=='drive':
             config=store.settings(); config['repository_ready']=False; config['drive']['enabled']=False; store.save_settings(config)
+        if value['purpose']=='monitoring':
+            store.set('api_quota_usage',None)
+            engine.quota_event.set()
         return jsonify(value)
 
     @app.post('/api/oauth/<purpose>/disconnect')
     def disconnect(purpose):
-        if purpose not in ['drive','photos']:
+        if purpose not in ['drive','photos','monitoring']:
             raise ValueError('Unbekannte Verbindung.')
         if engine.busy() and purpose=='drive':
             raise ValueError('Zuerst die laufende Drive-Aufgabe beenden.')
-        config=store.settings(); config[purpose]['enabled']=False; store.save_settings(config)
+        if purpose in ['drive','photos']:
+            config=store.settings(); config[purpose]['enabled']=False; store.save_settings(config)
         store.update_secrets(**{purpose+'_oauth':None})
+        if purpose=='monitoring':
+            store.set('api_quota_usage',None)
+        return jsonify(ok=True)
+
+    @app.post('/api/quotas/refresh')
+    def refresh_quotas():
+        if not google.connected('monitoring'):
+            raise ValueError('Zuerst die Google-Lesefreigabe für den Live-Verbrauch verbinden.')
+        engine.quota_event.set()
         return jsonify(ok=True)
 
     @app.get('/api/recovery-key')
