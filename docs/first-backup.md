@@ -28,6 +28,18 @@ The first run can take hours or days, depending on the amount of data and upload
 
 Wait for a successful result. **Noch keine** under the last backup means no successful complete disk backup has been recorded yet. An incomplete or failed run needs attention even if some data reached Drive.
 
+The progress card appears near the top of the overview. Its percentage measures processed source data. **Upload der App** measures this container's network upload, including photo uploads and a small amount of other app traffic. The rate uses a rolling measurement over roughly ten seconds. It is different from the speed at which source files are checked or reused.
+
+Until the file scan finishes, the total and percentage can change. A remaining-time estimate appears after the scan and at least thirty seconds of processing. Treat the finish time as an estimate; compression, reused blocks and connection speed can change it.
+
+### Taking a break
+
+Click **Pausieren** to stop the disk backup safely. Wait for **Pausiert** before assuming that its upload has stopped; the app first lets restic finish saving its current work. Click **Fortsetzen** when you want it to continue.
+
+Continuing checks the source files again and reuses already indexed backup data. Some recent work may need to be transferred again. The percentage and estimate are recalculated. The paused job stays paused across an app restart and reserves the Drive repository, so the scheduler does not start a second job over it.
+
+This pauses the HDD backup. The separate Immich photo automation keeps its own settings and can still upload new photos. Its traffic is included in the app upload-rate display.
+
 ## Step 4: Check that you can get data back
 
 Under **Wiederherstellung**, run **Backup prüfen**, then **Testweise zurückholen**. Run them one at a time and check the result after each.

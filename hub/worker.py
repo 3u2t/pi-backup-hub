@@ -19,9 +19,14 @@ from psycopg.rows import dict_row
 
 from .core import UTC, atomic, now, schedule_due
 from .google import GoogleError
+from .telemetry import UploadMeter
 
 
 class Cancelled(RuntimeError):
+    pass
+
+
+class Paused(RuntimeError):
     pass
 
 
@@ -36,12 +41,18 @@ class Engine:
         self.cancelled=set()
         self.submit_lock=threading.Lock()
         self.threads=[]
+        self.upload_meter=UploadMeter()
 
     def start(self):
         self.store.set('reconcile_running',False)
-        for function in [self._job_loop,self._photos_loop,self._schedule_loop]:
+        for function in [self._job_loop,self._photos_loop,self._schedule_loop,self._network_loop]:
             thread=threading.Thread(target=function,daemon=True,name=function.__name__)
             thread.start(); self.threads.append(thread)
+
+    def _network_loop(self):
+        while not self.stop.is_set():
+            self.upload_meter.sample()
+            self.stop.wait(2)
 
     def source_info(self):
         bootstrap=self.store.bootstrap()
@@ -65,7 +76,40 @@ class Engine:
 
     def busy(self):
         with self.store.db() as db:
-            return db.execute("SELECT id FROM jobs WHERE status IN ('queued','running') LIMIT 1").fetchone() is not None
+            return db.execute("SELECT id FROM jobs WHERE status IN ('queued','running','pausing','paused') LIMIT 1").fetchone() is not None
+
+    def pause(self, job):
+        with self.submit_lock, self.store.db() as db:
+            row=db.execute('SELECT kind,status FROM jobs WHERE id=?',(job,)).fetchone()
+            if not row or row['kind']!='backup' or row['status'] not in ['queued','running']:
+                raise ValueError('Nur eine laufende HDD-Sicherung kann pausiert werden.')
+            db.execute("UPDATE jobs SET status='pausing',summary=? WHERE id=?",('Pause wird vorbereitet. Bereits übertragene Daten werden gesichert.',job))
+
+    def resume(self, job):
+        with self.submit_lock:
+            with self.store.db() as db:
+                row=db.execute('SELECT kind,status FROM jobs WHERE id=?',(job,)).fetchone()
+                if not row or row['kind']!='backup' or row['status']!='paused':
+                    raise ValueError('Diese HDD-Sicherung ist nicht pausiert.')
+                if db.execute("SELECT id FROM jobs WHERE id!=? AND status IN ('queued','running','pausing','paused')",(job,)).fetchone():
+                    raise ValueError('Eine andere Drive-Aufgabe läuft bereits.')
+                db.execute("UPDATE jobs SET status='queued',started=NULL,finished=NULL,summary=NULL,progress=NULL WHERE id=?",(job,))
+            self.jobs.put((job,'backup'))
+
+    def cancel(self, job):
+        with self.submit_lock, self.store.db() as db:
+            row=db.execute('SELECT status FROM jobs WHERE id=?',(job,)).fetchone()
+            if not row or row['status'] not in ['queued','running','pausing','paused']:
+                raise ValueError('Diese Aufgabe läuft nicht mehr.')
+            if row['status']=='paused':
+                db.execute("UPDATE jobs SET status='cancelled',finished=?,summary=? WHERE id=?",(now(),'Vom Benutzer abgebrochen.',job))
+            else:
+                self.cancelled.add(job)
+
+    def _pause_pending(self, job):
+        with self.store.db() as db:
+            row=db.execute('SELECT status FROM jobs WHERE id=?',(job,)).fetchone()
+            return bool(row and row['status']=='pausing')
 
     def submit(self, kind):
         if kind not in ['backup','init','check','snapshots','restore_test','drive_test']:
@@ -100,8 +144,11 @@ class Engine:
             try:
                 if job in self.cancelled:
                     raise Cancelled()
-                with self.store.db() as db:
-                    db.execute("UPDATE jobs SET status='running',started=? WHERE id=?",(now(),job))
+                with self.submit_lock:
+                    if self._pause_pending(job):
+                        raise Paused()
+                    with self.store.db() as db:
+                        db.execute("UPDATE jobs SET status='running',started=? WHERE id=?",(now(),job))
                 self.log(job,{'backup':'HDD-Sicherung startet.','init':'Verschlüsselten Sicherungsspeicher vorbereiten.',
                     'check':'Sicherungsspeicher prüfen.','snapshots':'Sicherungsstände laden.',
                     'restore_test':'Immich-Datenbanksicherung testweise in einen neuen Ordner zurückholen.',
@@ -110,6 +157,10 @@ class Engine:
                 with self.store.db() as db:
                     db.execute("UPDATE jobs SET status='success',finished=?,summary=? WHERE id=?",(now(),summary,job))
                 self.log(job,summary)
+            except Paused:
+                with self.store.db() as db:
+                    db.execute("UPDATE jobs SET status='paused',finished=NULL,summary=? WHERE id=?",('Pausiert. Bereits gespeicherte Daten werden beim Fortsetzen wiederverwendet.',job))
+                self.log(job,'HDD-Sicherung pausiert. Beim Fortsetzen werden Dateien erneut geprüft und gespeicherte Daten wiederverwendet.')
             except Cancelled:
                 with self.store.db() as db:
                     db.execute("UPDATE jobs SET status='cancelled',finished=?,summary=? WHERE id=?",(now(),'Vom Benutzer abgebrochen.',job))
@@ -135,6 +186,10 @@ class Engine:
         threading.Thread(target=read,daemon=True).start()
         ended=False
         last_progress=0
+        progress={}
+        pause_started=None
+        next_pause_check=0
+        backup=args[:2]==['restic','backup']
         try:
             while not ended:
                 if job in self.cancelled or self.stop.is_set():
@@ -144,6 +199,19 @@ class Engine:
                     except subprocess.TimeoutExpired:
                         os.killpg(process.pid,signal.SIGKILL); process.wait()
                     raise Cancelled()
+                moment=time.monotonic()
+                if backup and pause_started is None and moment>=next_pause_check:
+                    next_pause_check=moment+0.5
+                    if self._pause_pending(job):
+                        try:
+                            process.send_signal(signal.SIGINT)
+                            pause_started=moment
+                        except ProcessLookupError:
+                            pass
+                if pause_started is not None and moment-pause_started>120:
+                    os.killpg(process.pid,signal.SIGTERM)
+                    process.wait(timeout=10)
+                    raise Paused()
                 try:
                     line=lines.get(timeout=1)
                 except queue.Empty:
@@ -161,15 +229,27 @@ class Engine:
                         self.log(job,line.strip())
                         continue
                     if value.get('message_type')=='status':
+                        progress.update(value)
+                        progress['updated_at']=now()
                         if time.monotonic()-last_progress>2:
                             with self.store.db() as db:
-                                db.execute('UPDATE jobs SET progress=? WHERE id=?',(json.dumps(value),job))
+                                db.execute('UPDATE jobs SET progress=? WHERE id=?',(json.dumps(progress),job))
                             last_progress=time.monotonic()
+                    elif value.get('message_type')=='verbose_status':
+                        if value.get('action')=='scan_finished':
+                            progress['scan_complete']=True
+                            progress['total_bytes']=value.get('data_size',progress.get('total_bytes',0))
+                            progress['total_files']=value.get('total_files',progress.get('total_files',0))
+                            progress['updated_at']=now()
+                            with self.store.db() as db:
+                                db.execute('UPDATE jobs SET progress=? WHERE id=?',(json.dumps(progress),job))
                     else:
                         self.log(job,json.dumps(value,ensure_ascii=False))
                         if value.get('snapshot_id'):
                             self.store.set('last_snapshot_id',value['snapshot_id'])
             code=process.wait()
+            if pause_started is not None and code!=0:
+                raise Paused()
             if code!=0:
                 detail=''.join(result)[-1800:] if collect else 'Details stehen im Protokoll.'
                 if code==3 and args[0]=='restic':
@@ -255,6 +335,8 @@ class Engine:
 
 
     def _job_backup(self, job):
+        if self._pause_pending(job):
+            raise Paused()
         self.require_source()
         settings=self.store.settings()
         if not settings['repository_ready']:
@@ -263,8 +345,10 @@ class Engine:
         self.store.set('last_backup_started',now())
         self.log(job,'Frischen Immich-Datenbank-Dump erstellen; danach HDD und zusätzliche Immich-Daten sichern.')
         self._stage(job)
+        if self._pause_pending(job):
+            raise Paused()
         self.require_source()
-        args=['restic','backup','--json','--host','raspberrypi','--tag','pi-backup-hub','--one-file-system',
+        args=['restic','backup','--json','--verbose=2','--host','raspberrypi','--tag','pi-backup-hub','--one-file-system',
               '--compression','auto']
         if settings['drive']['upload_mib']:
             args+=['--limit-upload',str(int(settings['drive']['upload_mib']*1024))]

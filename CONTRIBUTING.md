@@ -21,6 +21,7 @@ python3 -m venv .venv
 pip install -r requirements-dev.txt
 python -m pytest -q
 node --check static/app.js
+node tests/test_progress.js
 ```
 
 The unit tests use temporary directories and mocked Google responses. They do
@@ -30,6 +31,11 @@ not connect to a real account or prove that a complete cloud restore works.
 It checks read-only access, takes a real Immich database dump and restores a
 test file using a local encrypted repository. It does not upload to Google.
 Do not run it against an unconfigured installation.
+
+`tests/backup_pause_integration.py` separately tests a real local restic backup,
+pause, restart persistence, resume and byte-identical file restoration. Run it
+inside the Linux image with restic available. It creates its own temporary
+directory under `HUB_DATA` and makes no Google requests.
 
 ## License for contributions
 

@@ -86,6 +86,7 @@ class Store:
               token_hash TEXT NOT NULL,expires REAL NOT NULL,used INTEGER NOT NULL DEFAULT 0);
             ''')
             db.execute("UPDATE jobs SET status='interrupted',finished=?,summary='Durch Neustart unterbrochen. Daten bleiben erhalten.' WHERE status IN ('running','queued')", (now(),))
+            db.execute("UPDATE jobs SET status='paused',finished=NULL,summary='Pausiert. Bereits gespeicherte Daten werden beim Fortsetzen wiederverwendet.' WHERE status='pausing'")
             db.execute("UPDATE media SET status='pending' WHERE status='uploading'")
             db.execute("UPDATE media SET status='needs_review',error='Import durch Neustart unterbrochen. Bitte Google-Status abgleichen.' WHERE status='creating'")
         baseline = self.root/'baseline-assets.json'

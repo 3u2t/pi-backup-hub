@@ -40,6 +40,10 @@ Docker resource limits depend on the host kernel. `GOMEMLIMIT=384MiB` is a soft 
 
 The dashboard's repository check checks structure and references, not every stored block. The restore test retrieves only the database dump and checks its archive listing. See [the restore guide](restore.md) for a separate real-file restore.
 
+The live upload rate reads the container's network transmit counters. It includes both disk and photo uploads and other outbound app traffic. Processed source bytes include reused and deduplicated data, so they are shown separately.
+
+Pausing asks the backup process to stop cleanly and leaves the job paused until it is resumed or cancelled. Resume starts another pass with the same job and repository. Restic reuses indexed blocks from previous passes; see its [interrupted-backup explanation](https://restic.readthedocs.io/en/stable/faq.html#will-restic-resume-an-interrupted-backup). This may require reading files again and retransferring a small amount of recent work. Keep the repository and local app state intact.
+
 ## Updating
 
 Keep your private data directory, `.env` and any locally adapted mounts. Review release changes and database compatibility first. Wait for active backups and photo transfers to finish before restarting the app.

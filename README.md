@@ -4,6 +4,8 @@ Back up a Raspberry Pi's disk to Google Drive and send new Immich photos and vid
 
 Disk backups are encrypted and incremental. Photo uploads keep a queue and resume interrupted transfers. The dashboard is in German; these instructions are in English.
 
+During a disk backup, the dashboard shows its percentage, the app's current upload rate and an estimated finish time. You can pause the disk backup and continue later.
+
 ## Start here
 
 Setup has three parts. Do them in order:

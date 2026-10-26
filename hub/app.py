@@ -77,7 +77,7 @@ def create_app(start_workers=True, directory=None):
 
     @app.get('/health')
     def health():
-        return jsonify(status='ok',version='1.0.0')
+        return jsonify(status='ok',version='1.1.0')
 
     @app.route('/login',methods=['GET','POST'])
     def login():
@@ -130,7 +130,7 @@ def create_app(start_workers=True, directory=None):
             last_photos_upload=store.get('last_photos_upload'),snapshots=store.get('snapshots',[]),
             last_repository_check=store.get('last_repository_check'),last_restore_test=store.get('last_restore_test'),
             drive_quota=store.get('drive_quota'),timezone=config['timezone'],server_time=now(),
-            source_path=store.bootstrap().get('host_source'),version='1.0.0')
+            source_path=store.bootstrap().get('host_source'),network_upload=engine.upload_meter.snapshot(),version='1.1.0')
 
     @app.post('/api/settings')
     def settings():
@@ -224,11 +224,17 @@ def create_app(start_workers=True, directory=None):
 
     @app.post('/api/jobs/<int:job_id>/cancel')
     def cancel(job_id):
-        with store.db() as db:
-            row=db.execute("SELECT id FROM jobs WHERE id=? AND status IN ('queued','running')",(job_id,)).fetchone()
-        if not row:
-            raise ValueError('Diese Aufgabe läuft nicht mehr.')
-        engine.cancelled.add(job_id)
+        engine.cancel(job_id)
+        return jsonify(ok=True)
+
+    @app.post('/api/jobs/<int:job_id>/pause')
+    def pause(job_id):
+        engine.pause(job_id)
+        return jsonify(ok=True)
+
+    @app.post('/api/jobs/<int:job_id>/resume')
+    def resume(job_id):
+        engine.resume(job_id)
         return jsonify(ok=True)
 
     @app.get('/api/logs')
