@@ -70,6 +70,7 @@ def main():
         while job_record()['status'] in ['queued','running'] and time.monotonic()<deadline:
             time.sleep(0.1)
         assert job_record()['status']=='success',job_record()
+        assert json.loads(job_record()['progress'])['scan_complete'] is True
         engine.stop.set()
         worker.join(timeout=3)
         final_packs={str(path.relative_to(root/'repository')) for path in (root/'repository/data').glob('*/*')}
@@ -84,7 +85,7 @@ def main():
             assert db.execute('SELECT count(*) FROM jobs').fetchone()[0]==1
         print(json.dumps({'pause_completed':True,'pause_survives_restart':True,'resumed_same_job':True,
                           'saved_packs_preserved':True,'snapshot_created':True,
-                          'restored_files_match':True,'google_requests':0}))
+                          'restored_files_match':True,'scan_completion_received':True,'google_requests':0}))
 
 
 if __name__=='__main__':
