@@ -77,7 +77,7 @@ def create_app(start_workers=True, directory=None):
 
     @app.get('/health')
     def health():
-        return jsonify(status='ok',version='1.2.1')
+        return jsonify(status='ok',version='1.2.2')
 
     @app.route('/login',methods=['GET','POST'])
     def login():
@@ -132,7 +132,7 @@ def create_app(start_workers=True, directory=None):
             last_repository_check=store.get('last_repository_check'),last_restore_test=store.get('last_restore_test'),
             drive_quota=store.get('drive_quota'),timezone=config['timezone'],server_time=now(),
             source_path=store.bootstrap().get('host_source'),network_upload=engine.upload_meter.snapshot(),
-            api_quotas=engine.quota_monitor.snapshot(),version='1.2.1')
+            api_quotas=engine.quota_monitor.snapshot(),version='1.2.2')
 
     @app.post('/api/settings')
     def settings():

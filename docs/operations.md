@@ -52,6 +52,8 @@ API requests, upload bytes and account storage are separate limits; one uploaded
 
 Docker resource limits depend on the host kernel. `GOMEMLIMIT=384MiB` is a soft per-process Go runtime limit, not a hard container memory cap.
 
+The container's temporary filesystem allows up to 512 MiB. This is a capacity limit, not a reservation. Restic creates several encrypted packs there before uploading them. The earlier 128 MiB limit could fill up during a large backup. A backup now checks for at least 256 MiB of free temporary space before starting. See [restic's temporary-space requirements](https://restic.readthedocs.io/en/stable/047_tuning_parameters.html#pack-size).
+
 The dashboard's repository check checks structure and references, not every stored block. The restore test retrieves only the database dump and checks its archive listing. See [the restore guide](restore.md) for a separate real-file restore.
 
 The live upload rate reads the container's network transmit counters. It includes both disk and photo uploads and other outbound app traffic. Processed source bytes include reused and deduplicated data, so they are shown separately.

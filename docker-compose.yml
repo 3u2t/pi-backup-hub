@@ -53,7 +53,7 @@ services:
       - immich
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=128m
+      - /tmp:rw,noexec,nosuid,size=512m
     cap_drop:
       - ALL
     cap_add:

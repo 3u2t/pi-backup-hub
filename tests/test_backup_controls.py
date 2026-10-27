@@ -132,6 +132,29 @@ def test_upload_meter_measures_network_bytes_not_processed_source_size():
     assert meter.snapshot()['bytes_per_second'] is None
 
 
+def test_small_temporary_filesystem_is_rejected_before_backup(tmp_path,monkeypatch):
+    engine,store,job=engine_and_job(tmp_path)
+    class Space:
+        free=128*1024**2
+    monkeypatch.setattr('hub.worker.shutil.disk_usage',lambda path:Space())
+    with pytest.raises(RuntimeError,match='temporäre Backup-Arbeitsbereich'):
+        engine.require_temp_space()
+    Space.free=512*1024**2
+    engine.require_temp_space()
+
+
+def test_full_restic_temporary_area_is_explained_in_job_error(tmp_path,monkeypatch):
+    engine,store,job=engine_and_job(tmp_path)
+    class Process:
+        pid=123
+        stdout=io.StringIO(json.dumps({'message_type':'exit_error','code':1,'message':'Fatal: unable to save snapshot: Write: write /tmp/restic-temp-pack-123: no space left on device'})+'\n')
+        def wait(self,timeout=None):return 1
+        def poll(self):return 1
+    monkeypatch.setattr('hub.worker.subprocess.Popen',lambda *args,**kwargs:Process())
+    with pytest.raises(RuntimeError,match='temporäre Backup-Arbeitsbereich voll'):
+        engine._run(['restic','backup','--json'],job)
+
+
 def test_pause_api_requires_login_csrf_and_correct_job_type(tmp_path,monkeypatch):
     monkeypatch.setenv('HUB_ALLOWED_HOSTS','localhost')
     app=create_app(start_workers=False,directory=tmp_path/'app')

@@ -11,6 +11,7 @@ import shutil
 import signal
 import subprocess
 import threading
+import tempfile
 import time
 from urllib.parse import urlparse
 
@@ -95,6 +96,10 @@ class Engine:
         result=self.source_info()
         if not result['ok']:
             raise RuntimeError(result['error'])
+
+    def require_temp_space(self):
+        if shutil.disk_usage(tempfile.gettempdir()).free<256*1024**2:
+            raise RuntimeError('Der temporäre Backup-Arbeitsbereich ist zu klein oder voll. Mindestens rund 269 Megabyte müssen dort frei sein. Keine Sicherung gestartet.')
 
     def busy(self):
         with self.store.db() as db:
@@ -214,6 +219,7 @@ class Engine:
         progress={}
         pause_started=None
         next_pause_check=0
+        failure_detail=''
         backup=args[:2]==['restic','backup']
         try:
             while not ended:
@@ -268,6 +274,9 @@ class Engine:
                             progress['updated_at']=now()
                             with self.store.db() as db:
                                 db.execute('UPDATE jobs SET progress=? WHERE id=?',(json.dumps(progress),job))
+                    elif value.get('message_type')=='exit_error':
+                        failure_detail=str(value.get('message',''))
+                        self.log(job,json.dumps(value,ensure_ascii=False),'error')
                     else:
                         self.log(job,json.dumps(value,ensure_ascii=False))
                         if value.get('snapshot_id'):
@@ -277,6 +286,8 @@ class Engine:
                 raise Paused()
             if code!=0:
                 detail=''.join(result)[-1800:] if collect else 'Details stehen im Protokoll.'
+                if 'no space left on device' in failure_detail and 'restic-temp-pack-' in failure_detail:
+                    raise RuntimeError('Die Sicherung wurde abgebrochen, weil der temporäre Backup-Arbeitsbereich voll war. Bereits gespeicherte Daten in Drive bleiben erhalten.')
                 if code==3 and args[0]=='restic':
                     raise RuntimeError('Einige Quelldateien konnten nicht vollständig gelesen werden. Die Sicherung gilt als unvollständig. '+detail)
                 raise RuntimeError(Path(args[0]).name+' meldet Fehler '+str(code)+': '+detail)
@@ -366,6 +377,7 @@ class Engine:
         settings=self.store.settings()
         if not settings['repository_ready']:
             raise ValueError('Zuerst den Drive-Sicherungsspeicher vorbereiten.')
+        self.require_temp_space()
         env=self._restic_env()
         self.store.set('last_backup_started',now())
         self.log(job,'Frischen Immich-Datenbank-Dump erstellen; danach HDD und zusätzliche Immich-Daten sichern.')
