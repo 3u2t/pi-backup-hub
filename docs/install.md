@@ -26,7 +26,7 @@ cd pi-backup-hub
 cp .env.example .env
 ```
 
-While the repository is private, cloning requires a GitHub account with access. Keep using this project directory for the remaining commands.
+Keep using this project directory for the remaining commands.
 
 ## Step 2: Find the names and folders you need
 

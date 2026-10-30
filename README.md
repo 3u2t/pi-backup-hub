@@ -45,6 +45,6 @@ If you already uploaded your library to Google Photos, read [the existing-librar
 
 ## License
 
-You may use, modify and share this app for free, including inside a business. You may not sell the app or modified versions. Keep the license and copyright notices with copies you share.
+Pi Backup Hub is available under the [PolyForm Noncommercial License 1.0.0](LICENSE). The license permits noncommercial use, modification and distribution under its terms. Commercial use is restricted.
 
-See [LICENSE](LICENSE) for the full terms. This is a project-specific source-available license, not an [OSI-approved open-source license](https://opensource.org/osd). Third-party dependencies keep their own licenses.
+This is a source-available license, not an [OSI-approved open-source license](https://opensource.org/osd). Third-party dependencies keep their own licenses.

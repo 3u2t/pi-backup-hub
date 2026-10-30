@@ -22,6 +22,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 node --check static/app.js
 node tests/test_progress.js
+node tests/test_quotas.js
 ```
 
 The unit tests use temporary directories and mocked Google responses. They do
@@ -40,6 +41,6 @@ directory under `HUB_DATA` and makes no Google requests.
 ## License for contributions
 
 You keep the copyright in your contribution. By intentionally submitting it
-for inclusion, you offer it under the project's [No-Sale License](LICENSE).
+for inclusion, you offer it under the project's [PolyForm Noncommercial License](LICENSE).
 Only submit material you have the right to contribute. There is no copyright
 assignment to the maintainer.
